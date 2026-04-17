@@ -1,0 +1,8 @@
+{
+  "name": "StyleSprint",
+  "description": "Fast clothes delivery from local shops to you in under an hour.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}

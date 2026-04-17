@@ -1,0 +1,101 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isEmailVerified() { return request.auth.token.email_verified == true; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // --- Validation Blueprints ---
+    function isValidStore(data) {
+      return data.keys().hasAll(['name', 'location', 'category']) &&
+             data.name is string && data.name.size() <= 100 &&
+             data.category is string && data.category.size() <= 50;
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll(['name', 'price', 'storeId']) &&
+             data.name is string && data.name.size() <= 200 &&
+             data.price is number && data.price > 0 &&
+             isValidId(data.storeId);
+    }
+
+    function isValidOrderSchema(data) {
+      return data.keys().hasAll(['customerId', 'storeId', 'items', 'total', 'status', 'createdAt']) &&
+             data.items is list && data.items.size() > 0 && data.items.size() <= 50 &&
+             data.total is number && data.total >= 0 &&
+             data.status is string &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidOrderState(data) {
+      return data.customerId == request.auth.uid &&
+             isValidId(data.storeId) &&
+             data.status in ['pending', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'] &&
+             data.createdAt == request.time;
+    }
+
+    function isOrderValid(data) {
+      return isValidOrderSchema(data) && isValidOrderState(data);
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email']) &&
+             data.email is string && data.email.size() <= 200 &&
+             data.email == request.auth.token.email;
+    }
+
+    // --- Rules ---
+
+    match /stores/{storeId} {
+      allow read: if true;
+      allow write: if false; // System/Admin only - Client cannot create stores in this demo
+
+      match /products/{productId} {
+        allow read: if true;
+        allow write: if false; // System/Admin only
+      }
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'favoriteStoreIds']);
+    }
+
+    match /orders/{orderId} {
+      // Secure List Query: Must filter by customerId
+      allow list: if isSignedIn() && resource.data.customerId == request.auth.uid;
+      allow get: if isSignedIn() && (resource.data.customerId == request.auth.uid || resource.data.partnerId == request.auth.uid);
+      
+      allow create: if isSignedIn() && isEmailVerified() && isOrderValid(incoming()) &&
+                    exists(/databases/$(database)/documents/stores/$(incoming().storeId));
+
+      allow update: if (isValidOrderSchema(incoming()) && isSignedIn()) && (
+        // Action: Cancel (by customer)
+        (resource.data.customerId == request.auth.uid && 
+         (existing().status == 'pending' || existing().status == 'preparing') &&
+         incoming().status == 'cancelled' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'cancelReason'])) ||
+        // Action: Return/Replace (by customer)
+        (resource.data.customerId == request.auth.uid && 
+         existing().status == 'delivered' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['items'])) ||
+        // Action: Update Status (by partner/admin simulation)
+        (resource.data.partnerId == request.auth.uid &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['status']))
+      ) && (incoming().status != existing().status || incoming().items != existing().items)
+        && incoming().createdAt == existing().createdAt
+        && incoming().customerId == existing().customerId;
+    }
+  }
+}

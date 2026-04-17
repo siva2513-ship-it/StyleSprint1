@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "Store": {
+      "title": "Store",
+      "description": "A fashion retailer offering local styling products.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Display name of the store" },
+        "address": { "type": "string", "description": "Physical location" },
+        "location": { "type": "object", "description": "Geo-point coordinates" },
+        "image": { "type": "string", "description": "URL to store cover image" },
+        "rating": { "type": "number", "description": "Average user rating" },
+        "category": { "type": "string", "description": "Type of fashion (e.g., Luxury, Streetwear, Ethnic)" }
+      },
+      "required": ["name", "location", "category"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "A fashion item available for delivery.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "images": { "type": "array" },
+        "sizes": { "type": "array" },
+        "storeId": { "type": "string" },
+        "category": { "type": "string" },
+        "inStock": { "type": "boolean" }
+      },
+      "required": ["name", "price", "storeId"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A delivery request for fashion items.",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "storeId": { "type": "string" },
+        "items": { "type": "array" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "preparing", "out_for_delivery", "delivered", "cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "deliveryLocation": { "type": "object" },
+        "partnerId": { "type": "string", "description": "Delivery person ID" }
+      },
+      "required": ["customerId", "storeId", "items", "total", "status"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Customer profile data.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email"]
+    }
+  },
+  "firestore": {
+    "/stores/{storeId}": {
+      "schema": "Store",
+      "description": "Collection of available fashion stores."
+    },
+    "/stores/{storeId}/products/{productId}": {
+      "schema": "Product",
+      "description": "Products available within a specific store."
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer orders for rapid delivery."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile information."
+    }
+  }
+}
